@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check (server)
+        run: npx tsc --noEmit --project tsconfig.json
+
+  build-check:
+    name: Build Check (web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Only run on PRs targeting main to save minutes
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+
+    env:
+      EXPO_PUBLIC_DOMAIN: localhost:5000
+      # Placeholder — real secrets only needed for full deploy
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Expo web export (dry run)
+        run: npx expo export --platform web --output-dir dist-check
+        env:
+          # Suppress interactive prompts
+          CI: true
+
+      - name: Verify output exists
+        run: |
+          if [ ! -f dist-check/index.html ]; then
+            echo "ERROR: index.html not found in dist-check/"
+            exit 1
+          fi
+          echo "Web export OK — $(du -sh dist-check | cut -f1) total"
