@@ -3,7 +3,6 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-  # Allow manual deploys from the Actions tab
   workflow_dispatch:
 
 concurrency:
@@ -16,18 +15,10 @@ permissions:
   id-token: write
 
 jobs:
-  # ─────────────────────────────────────────────
-  # 1. Build the Expo web bundle
-  # ─────────────────────────────────────────────
   build:
-    name: Build Web
+    name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 30
-
-    env:
-      CI: true
-      # Point the app at your deployed API (set this secret in repo settings)
-      EXPO_PUBLIC_DOMAIN: ${{ secrets.EXPO_PUBLIC_DOMAIN }}
 
     steps:
       - name: Checkout
@@ -42,21 +33,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Bake the API URL into the bundle at build time.
+      # Set EXPO_PUBLIC_DOMAIN in: Settings → Secrets → Actions
       - name: Export Expo web build
         run: npx expo export --platform web --output-dir dist
-        # expo export handles its own bundling — no Metro server needed
+        env:
+          CI: true
+          EXPO_PUBLIC_DOMAIN: ${{ secrets.EXPO_PUBLIC_DOMAIN }}
 
-      - name: Add .nojekyll (prevents GitHub Pages stripping _expo folder)
+      # GitHub Pages runs Jekyll by default which ignores folders starting
+      # with underscore (like _expo/). This file disables that behaviour.
+      - name: Add .nojekyll
         run: touch dist/.nojekyll
+
+      # expo export doesn't generate a 404.html, so deep links like
+      # /article/xyz would 404 on GitHub Pages instead of loading the app.
+      # Copying index.html → 404.html makes the SPA handle all routes.
+      - name: Add SPA 404 fallback
+        run: cp dist/index.html dist/404.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
-  # ─────────────────────────────────────────────
-  # 2. Deploy to GitHub Pages
-  # ─────────────────────────────────────────────
   deploy:
     name: Deploy
     needs: build

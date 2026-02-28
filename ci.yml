@@ -32,21 +32,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Type check (server)
-        run: npx tsc --noEmit --project tsconfig.json
+      - name: Type check
+        run: npx tsc --noEmit
 
   build-check:
-    name: Build Check (web)
+    name: Build Check
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Only run on PRs targeting main to save minutes
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
-
-    env:
-      EXPO_PUBLIC_DOMAIN: localhost:5000
-      # Placeholder — real secrets only needed for full deploy
-      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
-      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
 
     steps:
       - name: Checkout
@@ -64,13 +57,11 @@ jobs:
       - name: Expo web export (dry run)
         run: npx expo export --platform web --output-dir dist-check
         env:
-          # Suppress interactive prompts
           CI: true
+          # Use a placeholder — real domain only needed for production deploy
+          EXPO_PUBLIC_DOMAIN: ci-placeholder.example.com
 
-      - name: Verify output exists
+      - name: Verify SPA shell exists
         run: |
-          if [ ! -f dist-check/index.html ]; then
-            echo "ERROR: index.html not found in dist-check/"
-            exit 1
-          fi
-          echo "Web export OK — $(du -sh dist-check | cut -f1) total"
+          test -f dist-check/index.html || (echo "ERROR: index.html missing" && exit 1)
+          echo "✓ Build OK — $(du -sh dist-check | cut -f1)"
