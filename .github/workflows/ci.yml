@@ -16,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    env:
+      CI: true
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,7 +42,8 @@ jobs:
     name: Build Check
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    # Run on PRs targeting main or develop to catch build failures early
+    if: github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'develop')
 
     steps:
       - name: Checkout
@@ -58,8 +62,11 @@ jobs:
         run: npx expo export --platform web --output-dir dist-check
         env:
           CI: true
-          # Use a placeholder — real domain only needed for production deploy
           EXPO_PUBLIC_DOMAIN: ci-placeholder.example.com
+          # Dummy value — no real database is needed for the web export.
+          # Expo only bundles client code; the server is never started.
+          DATABASE_URL: "dummy://not-a-real-database"
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
 
       - name: Verify SPA shell exists
         run: |
