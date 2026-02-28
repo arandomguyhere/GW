@@ -8,7 +8,8 @@ on:
 
 concurrency:
   group: deploy-${{ github.ref }}
-  cancel-in-progress: true
+  # Let in-flight deploys finish rather than cancelling mid-deploy
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -30,6 +31,15 @@ jobs:
       EXPO_PUBLIC_DOMAIN: ${{ secrets.EXPO_PUBLIC_DOMAIN }}
 
     steps:
+      - name: Validate required secrets
+        run: |
+          if [ -z "$EXPO_PUBLIC_DOMAIN" ]; then
+            echo "ERROR: EXPO_PUBLIC_DOMAIN secret is not set."
+            echo "The deployed app will crash without a valid API domain."
+            echo "Set it in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -45,6 +55,14 @@ jobs:
       - name: Export Expo web build
         run: npx expo export --platform web --output-dir dist
         # expo export handles its own bundling — no Metro server needed
+
+      - name: Verify build output
+        run: |
+          if [ ! -f dist/index.html ]; then
+            echo "ERROR: index.html not found in dist/"
+            exit 1
+          fi
+          echo "Build OK — $(du -sh dist | cut -f1) total"
 
       - name: Add .nojekyll (prevents GitHub Pages stripping _expo folder)
         run: touch dist/.nojekyll
